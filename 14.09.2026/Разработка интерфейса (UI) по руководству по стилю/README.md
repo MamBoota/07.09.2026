@@ -1,1 +1,1 @@
-python ui_partner_list.py
+python3 ui_partner_list.py

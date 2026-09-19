@@ -37,38 +37,76 @@ ICON_COLORS = [
 
 ICON_SHAPES = ['circle', 'square', 'diamond', 'hexagon', 'triangle', 'rounded_square']
 
-POSITIONS = [
-    'Генеральный директор',
-    'Коммерческий директор',
-    'Директор по продажам',
-    'Руководитель отдела закупок',
-]
-
-PARTNER_NAMES = [
-    'ООО "Альфа"', 'ИП Петров', 'ООО "Бета"', 'ООО "Гамма"',
-    'ИП Сидоров', 'АО "Дельта"', 'ООО "Эпсилон"', 'ИП Козлов',
-]
-
 DEMO_QUANTITIES = [5_000, 0, 25_000, 75_000, 350_000, 150_000, 12_500, 500_000]
 
+# Реальные данные для заполнения БД (включая телефон и рейтинг)
+BASE_PARTNERS = [
+    (1, 'ООО "Альфа"', 'alpha@example.com', '+7 (495) 123-45-67', 8.5),
+    (2, 'ИП Петров', 'petrov@example.com', '+7 (916) 987-65-43', 7.2),
+    (3, 'ООО "Бета"', 'beta@example.com', '+7 (812) 111-22-33', 9.1),
+    (4, 'ООО "Гамма"', 'gamma@example.com', '+7 (903) 444-55-66', 6.8),
+    (5, 'ИП Сидоров', 'sidorov@example.com', '+7 (999) 777-88-99', 8.0),
+    (6, 'АО "Дельта"', 'delta@example.com', '+7 (495) 321-00-00', 9.5),
+    (7, 'ООО "Эпсилон"', 'epsilon@example.com', '+7 (812) 654-32-10', 7.9),
+    (8, 'ИП Козлов', 'kozlov@example.com', '+7 (916) 111-00-99', 8.8),
+]
 
 def hash_string(s: str) -> int:
     return int(hashlib.md5(s.encode()).hexdigest(), 16)
 
+def seed_test_data(db_path: str, stress_test: bool = False) -> None:
+    """Очищает БД и заполняет её реальными структурированными данными."""
+    conn = sqlite3.connect(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA foreign_keys = OFF")
+        cursor.execute("DELETE FROM sales_history")
+        cursor.execute("DELETE FROM partners")
+        cursor.execute("DELETE FROM sqlite_sequence WHERE name='sales_history'")
+        cursor.execute("PRAGMA foreign_keys = ON")
+        
+        count = 100 if stress_test else len(BASE_PARTNERS)
+        partners_to_insert = []
+        sales_to_insert = []
+        
+        for i in range(1, count + 1):
+            if stress_test:
+                name = f'Компания {i}'
+                email = f'company{i}@example.com'
+                phone = f'+7 (999) {random.randint(100, 999)}-{random.randint(10, 99)}-{random.randint(10, 99)}'
+                rating = round(random.uniform(5.0, 10.0), 1)
+                qty = random.randint(0, 500_000)
+            else:
+                idx = (i - 1) % len(BASE_PARTNERS)
+                name = BASE_PARTNERS[idx][1]
+                email = BASE_PARTNERS[idx][2]
+                phone = BASE_PARTNERS[idx][3]
+                rating = BASE_PARTNERS[idx][4]
+                qty = DEMO_QUANTITIES[idx]
+            
+            partners_to_insert.append((i, name, email, phone, rating))
+            sales_to_insert.append((i, qty))
+        
+        cursor.executemany(
+            "INSERT INTO partners (id, name, email, phone, rating) VALUES (?, ?, ?, ?, ?);",
+            partners_to_insert
+        )
+        cursor.executemany(
+            "INSERT INTO sales_history (partner_id, quantity) VALUES (?, ?);",
+            sales_to_insert
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
-def generate_phone() -> str:
-    codes = ['495', '812', '903', '916']
-    return f"+7 {random.choice(codes)} {random.randint(100, 999)}-{random.randint(10, 99)}-{random.randint(10, 99)}"
-
-
-def generate_partner_info(partner_id: int, total_quantity: int) -> dict:
-    return {
-        'position': random.choice(POSITIONS),
-        'phone': generate_phone(),
-        'rating': random.randint(5, 10),
-        'total_quantity': total_quantity if total_quantity is not None else 0,
-    }
-
+def get_all_partners(db_path: str) -> list:
+    conn = sqlite3.connect(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM partners ORDER BY id")
+        return [row[0] for row in cursor.fetchall()]
+    finally:
+        conn.close()
 
 class CompanyIcon(tk.Canvas):
     def __init__(self, parent, company_name: str, size: int = 40):
@@ -121,67 +159,6 @@ class CompanyIcon(tk.Canvas):
         r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
         return (r * 299 + g * 587 + b * 114) / 1000 < 128
 
-
-def seed_test_data(db_path: str, stress_test: bool = False) -> None:
-    """Всегда очищает БД и заполняет свежими данными."""
-    conn = sqlite3.connect(db_path)
-    try:
-        cursor = conn.cursor()
-        # Отключаем проверку FK, чтобы безопасно очистить таблицы
-        cursor.execute("PRAGMA foreign_keys = OFF")
-        # Всегда очищаем таблицы (сначала дочернюю, потом родительскую)
-        cursor.execute("DELETE FROM sales_history")
-        cursor.execute("DELETE FROM partners")
-        # Сбрасываем автоинкремент
-        cursor.execute("DELETE FROM sqlite_sequence WHERE name='sales_history'")
-        cursor.execute("PRAGMA foreign_keys = ON")
-        
-        count = 100 if stress_test else 8
-        partners = []
-        sales = []
-        for i in range(1, count + 1):
-            if stress_test:
-                name = f'Компания {i}'
-                email = f'company{i}@example.com'
-                qty = random.randint(0, 500_000)
-            else:
-                name = PARTNER_NAMES[i - 1]
-                email = f'partner{i}@example.com'
-                qty = DEMO_QUANTITIES[i - 1]
-            
-            partners.append((i, name, email))
-            sales.append((i, qty))
-        
-        cursor.executemany(
-            "INSERT INTO partners (id, name, email) VALUES (?, ?, ?);",
-            partners
-        )
-        cursor.executemany(
-            "INSERT INTO sales_history (partner_id, quantity) VALUES (?, ?);",
-            sales
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-
-def get_all_partners(db_path: str) -> list:
-    conn = sqlite3.connect(db_path)
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT p.id, p.name, p.email,
-                   COALESCE(SUM(s.quantity), 0) as total_quantity
-            FROM partners p
-            LEFT JOIN sales_history s ON p.id = s.partner_id
-            GROUP BY p.id, p.name, p.email
-            ORDER BY p.id
-        """)
-        return cursor.fetchall()
-    finally:
-        conn.close()
-
-
 class PartnerCard(tk.Frame):
     def __init__(self, parent, partner_data):
         super().__init__(parent, bg=STYLE['border_color'], highlightthickness=1,
@@ -224,11 +201,15 @@ class PartnerCard(tk.Frame):
         info_frame = tk.Frame(content, bg=STYLE['bg_card'])
         info_frame.pack(fill='x', padx=46)
         
+        # Берем РЕАЛЬНЫЕ данные из БД, а не сгенерированные
+        phone = partner_data.get('phone', 'Не указан')
+        rating = partner_data.get('rating', 0.0)
+        total_qty = partner_data.get('total_quantity', 0)
+        
         for text, color in [
-            (partner_data.get('position', ''), STYLE['text_secondary']),
-            (partner_data.get('phone', ''), STYLE['text_primary']),
-            (f"Рейтинг: {partner_data.get('rating', 0)} | Куплено: {partner_data.get('total_quantity', 0):,} ед.",
-             STYLE['text_secondary']),
+            (partner_data.get('position', 'Партнер'), STYLE['text_secondary']),
+            (phone, STYLE['text_primary']),
+            (f"Рейтинг: {rating} | Куплено: {total_qty:,} ед.", STYLE['text_secondary']),
         ]:
             tk.Label(
                 info_frame,
@@ -238,7 +219,6 @@ class PartnerCard(tk.Frame):
                 fg=color,
                 anchor='w'
             ).pack(fill='x', pady=(0, 4))
-
 
 class PartnerApp(tk.Tk):
     def __init__(self, stress_test: bool = False):
@@ -327,9 +307,9 @@ class PartnerApp(tk.Tk):
         init_db(DB_PATH)
         seed_test_data(DB_PATH, stress_test=self.stress_test)
         
-        partners = get_all_partners(DB_PATH)
+        partner_ids = get_all_partners(DB_PATH)
         
-        if not partners:
+        if not partner_ids:
             tk.Label(
                 self.cards_container,
                 text="Нет данных о партнерах",
@@ -340,22 +320,22 @@ class PartnerApp(tk.Tk):
             return
         
         loaded = 0
-        for partner_id, name, email, total_qty in partners:
+        for partner_id in partner_ids:
             try:
                 data = get_partner_with_discount(DB_PATH, partner_id)
                 if 'error' in data:
                     continue
                 
-                data.update(generate_partner_info(partner_id, total_qty))
+                # Данные 'phone', 'rating' и 'total_quantity' уже пришли РЕАЛЬНЫМИ из БД
                 data['type'] = 'Партнер'
+                data['position'] = 'Партнер' # Заглушка, так как в БД нет должности, но UI её ожидает
                 
                 PartnerCard(self.cards_container, data).pack(fill='x', pady=15, padx=20)
                 loaded += 1
             except Exception as e:
                 print(f"Ошибка загрузки партнера {partner_id}: {e}")
         
-        print(f"Загружено {loaded} из {len(partners)} партнеров")
-
+        print(f"Загружено {loaded} из {len(partner_ids)} партнеров")
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == '--stress':
