@@ -1,0 +1,1 @@
+python3 f3_ui_partner_list.py
