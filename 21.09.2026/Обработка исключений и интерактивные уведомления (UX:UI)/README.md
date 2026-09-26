@@ -1,1 +1,1 @@
-# 21.09.2026
+python3 f3.4_ui_partner_list.py
