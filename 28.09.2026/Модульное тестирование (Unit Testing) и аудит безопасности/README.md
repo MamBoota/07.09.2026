@@ -1,0 +1,2 @@
+python3 f4.4_ui_partner_list.py
+python3 test_material_calculator.py
